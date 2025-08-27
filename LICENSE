@@ -1,6 +1,6 @@
-MIT License with Attribution Clause
+MIT License with Safety Notice
 
-Copyright (c) 2025 Ram
+Copyright (c) 2025 RAM
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -9,18 +9,23 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-1. Attribution: Any use, distribution, or derivative works of this project
-   must credit the original project and author by linking to the official
-   GitHub repository:
-   https://github.com/TheRamDev/DeadBasic-coding-language
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
-2. Core File Integrity: The main interpreter file (`deadbasic.py`) should not
-   be redistributed as a standalone modified version under a different name.
-   Modifications for personal use, contributions via pull requests, or forks
-   that clearly reference the original repository are permitted.
+---
 
-3. Standard MIT terms: The above copyright notice and this permission notice
-   shall be included in all copies or substantial portions of the Software.
+## Safety Notice
+
+The **official and safe version** of DeadBasic is maintained at:
+
+https://github.com/TheRamDev/DeadBasic-coding-language
+
+Users are strongly encouraged to obtain their copy of `deadbasic.py` and
+related files directly from the above repository. Other distributions may
+contain modifications or malicious changes not reviewed or endorsed by the
+author.
+
+---
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
