@@ -12,7 +12,7 @@ furnished to do so, subject to the following conditions:
 1. Attribution: Any use, distribution, or derivative works of this project
    must credit the original project and author by linking to the official
    GitHub repository:
-   https://github.com/yourusername/deadbasic.ba
+   https://github.com/TheRamDev/DeadBasic-coding-language
 
 2. Core File Integrity: The main interpreter file (`deadbasic.py`) should not
    be redistributed as a standalone modified version under a different name.
