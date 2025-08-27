@@ -3,8 +3,9 @@
 # v0.4.0: adds while/endwhile, clearer error messages, TAB or 4 spaces accepted
 
 import sys, shlex, pathlib
+import getpass
 
-VERSION = "0.4.0"
+VERSION = "0.4.2"
 
 # ---------- Error types ----------
 class DeadBasicError(Exception):
@@ -27,10 +28,15 @@ class DeadBasic:
 
         # Commands
         self.commands = {
-            "printtext": self.cmd_printtext,
-            "showvars":  self.cmd_showvars,
-            "openfile":  self.cmd_openfile,
-            "add":       self.cmd_add,
+            "printtext".lower(): self.cmd_printtext,
+            "showvars".lower():  self.cmd_showvars,
+            "openfile".lower():  self.cmd_openfile,
+            "add".lower():       self.cmd_add,
+            "help".lower():      self.help,
+            "subt".lower():      self.cmd_subt,
+            "div".lower() :      self.cmd_div,
+            "times".lower():     self.cmd_multiply,
+
         }
 
         # Declarations
@@ -43,9 +49,18 @@ class DeadBasic:
         # For better error messages
         self.current_file = "<repl>"
 
+
+    # ---------- Help Command --------
+    @staticmethod
+    def help():
+        print(f"Welcome to Deadbasic Version: {VERSION}")
+        print("Commands are as followed.")
+        print("Printtext: Prints anything following that line \n showvars: Shows all varitables in your active file and what they are set to. \n Openfile: Opens any .ba file. \n add: Adds 2 numbers together \n subt: Subtracts 2 numbers \n div: Divides 2 numbers \n times: Multiply 2 numbers together")
+        print("Copyright 2025. License under MIT please see https://github.com/TheRamDev/DeadBasic-coding-language/blob/main/LICENSE for license info ")
+
     # ---------- helpers ----------
     def _resolve(self, token, line_no):
-        """Resolve token to a Python value (may be str, int, float)."""
+        """Resolve token to a Python value (maybe str, int, float)."""
         if token in self.vars:
             return self.vars[token]["value"]
         try:
@@ -148,7 +163,7 @@ class DeadBasic:
                 out.append(tok)
         print(" ".join(out))
 
-    def cmd_showvars(self, args, line_no):
+    def cmd_showvars(self):
         if not self.vars:
             print("(no vars)")
             return
@@ -171,6 +186,36 @@ class DeadBasic:
         b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
         result = a + b
         print(int(result) if result.is_integer() else result)
+
+    def cmd_subt(self, args, line_no):
+        if len(args) != 2:
+            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+        a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
+        b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
+        result = a - b
+        print(int(result) if result.is_integer() else result)
+
+    def cmd_div(self, args, line_no):
+        if len(args) != 2:
+            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+        a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
+        b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
+        try:
+            result = a / b
+        except ZeroDivisionError:
+            print("You cannot divide by 0. Nice try. \n \n (I almost forgot to add this)")
+
+        print(int(result) if result.is_integer() else result)
+
+    def cmd_multiply(self, args, line_no):
+        if len(args) != 2:
+            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+        a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
+        b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
+        result = a * b
+        print(int(result) if result.is_integer() else result)
+
+
 
     def cmd_declare(self, vtype, args, line_no):
         if len(args) < 2:
@@ -204,7 +249,7 @@ class DeadBasic:
         raw = content.strip()
         if not raw:
             return
-        if raw.startswith("#") or raw.startswith("//"):
+        if raw.startswith("#") or raw.startswith("``"):
             return
 
         try:
@@ -244,7 +289,7 @@ class DeadBasic:
                 self.if_ctx = None
                 return
 
-            # If an IF is open, only else/endif are legal at top level
+            # If an IS open, only else/endif are legal at top level
             if self.if_ctx is not None:
                 raise SyntaxDeadBasicError(self._fmt(line_no,
                     "Inside IF: expected an indented line (TAB/4 spaces), 'else', or 'endif'"))
@@ -288,14 +333,14 @@ class DeadBasic:
         def parse_tokens(line, lno):
             indent, content = self._detect_indent(line)
             raw = content.strip()
-            return indent, raw, (shlex.split(raw, posix=True) if raw and not raw.startswith(("#", "//")) else [])
+            return indent, raw, (shlex.split(raw, posix=True) if raw and not raw.startswith(("#", "``")) else [])
 
         while pc < n:
             line_no = pc + 1
             line = lines[pc]
             indent, raw, tokens = parse_tokens(line, line_no)
 
-            if not raw or raw.startswith("#") or raw.startswith("//"):
+            if not raw or raw.startswith("#") or raw.startswith("``"):
                 pc += 1
                 continue
 
@@ -380,7 +425,7 @@ class DeadBasic:
                     pc += 1
                     continue
 
-                # If an IF is open, only else/endif are allowed at top level
+                # If an IS open, only else/endif are allowed at top level
                 if self.if_ctx is not None:
                     raise SyntaxDeadBasicError(self._fmt(line_no,
                         "Inside IF: expected an indented body line (TAB/4 spaces), 'else', or 'endif'"))
@@ -452,17 +497,18 @@ def usage():
         "  - Cmds : printtext ... | showvars | openfile \"file.ba\" | add a b\n"
         "  - IF   : if <lhs> <op> <rhs> | if not <val> ; ops: = != < > <= >=\n"
         "  - WHILE: while <cond> ... endwhile   (no nesting; body uses ONE TAB or FOUR SPACES)\n"
-        "  - Comments start with # or //\n"
+        "  - Comments start with # or ``\n"
     )
 
 def repl():
-    print(f"DeadBasic.BA Console v{VERSION} — Ctrl+C to exit")
+    print(f"DeadBasic.BA Console v{VERSION} — Type exit to exit.")
     db = DeadBasic()
     line_no = 0
+    user = getpass.getuser()
     try:
         while True:
             line_no += 1
-            line = input("DB> ")
+            line = input(f"DB {user}> ")
             if line.strip().lower() in {"exit", "quit"}:
                 break
             try:
