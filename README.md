@@ -27,4 +27,18 @@ It’s lightweight, indentation-based, and runs either interactively or from `.b
 ## 📦 Installation
 
 Clone the repository:
+```python
+git clone https://github.com/TheRamDev/DeadBasic-coding-language.git
+ ```
 
+Run it via 
+
+```python 
+Python deadbasic.py (Filename) 
+```
+## OR
+
+```python
+Python deadbasic.py
+```
+Controbutions are more then welcome. If you add commands or make some bug fixes send a PR. Ill integrate PR's when i see them.
