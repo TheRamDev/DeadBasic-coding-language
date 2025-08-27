@@ -1,0 +1,8 @@
+
+
+int x 10
+if x > 5
+    printtext "x is greater than 5"
+else
+    printtext "x is not greater"
+endif
