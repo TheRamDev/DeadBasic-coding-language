@@ -12,20 +12,7 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
 
----
 
-## Safety Notice
-
-The **official and safe version** of DeadBasic is maintained at:
-
-https://github.com/TheRamDev/DeadBasic-coding-language
-
-Users are strongly encouraged to obtain their copy of `deadbasic.py` and
-related files directly from the above repository. Other distributions may
-contain modifications or malicious changes not reviewed or endorsed by the
-author.
-
----
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
