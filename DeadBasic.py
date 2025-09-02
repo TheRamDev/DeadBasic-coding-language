@@ -4,8 +4,8 @@
 
 import sys, shlex, pathlib
 import getpass
-
-VERSION = "0.4.2"
+import math
+VERSION = "0.4.3"
 
 # ---------- Error types ----------
 class DeadBasicError(Exception):
@@ -36,6 +36,8 @@ class DeadBasic:
             "subt".lower():      self.cmd_subt,
             "div".lower() :      self.cmd_div,
             "times".lower():     self.cmd_multiply,
+            "sqrt".lower():      self.cmd_squareroot,
+
 
         }
 
@@ -187,9 +189,16 @@ class DeadBasic:
         result = a + b
         print(int(result) if result.is_integer() else result)
 
+    def cmd_squareroot(self, args, line_no):
+        if len(args) > 1:
+            raise SyntaxDeadBasicError(self._fmt(line_no, "Square root only needs 1 number"))
+        a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
+        result = math.sqrt(a)
+        print(int(result) if result.is_integer() else result)
+
     def cmd_subt(self, args, line_no):
         if len(args) != 2:
-            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+            raise SyntaxDeadBasicError(self._fmt(line_no, "Subtract needs exactly 2 numbers"))
         a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
         b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
         result = a - b
@@ -197,19 +206,21 @@ class DeadBasic:
 
     def cmd_div(self, args, line_no):
         if len(args) != 2:
-            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+            raise SyntaxDeadBasicError(self._fmt(line_no, "Divide needs exactly 2 numbers"))
         a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
         b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
         try:
             result = a / b
+            print(int(result) if result.is_integer() else result)
         except ZeroDivisionError:
             print("You cannot divide by 0. Nice try. \n \n (I almost forgot to add this)")
 
-        print(int(result) if result.is_integer() else result)
+
+
 
     def cmd_multiply(self, args, line_no):
         if len(args) != 2:
-            raise SyntaxDeadBasicError(self._fmt(line_no, "add needs exactly 2 numbers"))
+            raise SyntaxDeadBasicError(self._fmt(line_no, "Multiply needs exactly 2 numbers"))
         a = self._to_number(self._resolve(args[0], line_no), line_no, "first argument")
         b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
         result = a * b
