@@ -3,7 +3,7 @@
 [![Made With Python](https://img.shields.io/badge/Made%20with-Python-blue?logo=python)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-DeadBasic is a **toy programming language** built for fun, demos, and learning.  
+DeadBasic is a **programming language** built for fun, demos, and learning.  
 It’s lightweight, indentation-based, and runs either interactively or from `.ba` script files.
 
 ---
