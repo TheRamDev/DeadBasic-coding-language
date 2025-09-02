@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-# DeadBasic.BA — minimal interpreter with 1-indent IF/ELSE and WHILE
-# v0.4.0: adds while/endwhile, clearer error messages, TAB or 4 spaces accepted
+# DeadBasic.BA
+# v0.4.4: Added inputs, Fixed some error  handling issues. Refined some error with div functions.
 
 import sys, shlex, pathlib
 import getpass
 import math
-VERSION = "0.4.3"
+
+
+import traceback
+
+VERSION = "0.4.4"
 
 # ---------- Error types ----------
 class DeadBasicError(Exception):
     """Base interpreter error."""
+
     pass
 
 class SyntaxDeadBasicError(DeadBasicError):
@@ -18,6 +23,7 @@ class SyntaxDeadBasicError(DeadBasicError):
 
 class RuntimeDeadBasicError(DeadBasicError):
     """Runtime error (e.g., type mismatch, unknown var)."""
+
     pass
 
 
@@ -37,7 +43,7 @@ class DeadBasic:
             "div".lower() :      self.cmd_div,
             "times".lower():     self.cmd_multiply,
             "sqrt".lower():      self.cmd_squareroot,
-
+            "input".lower():     self.cmd_input,
 
         }
 
@@ -57,7 +63,7 @@ class DeadBasic:
     def help():
         print(f"Welcome to Deadbasic Version: {VERSION}")
         print("Commands are as followed.")
-        print("Printtext: Prints anything following that line \n showvars: Shows all varitables in your active file and what they are set to. \n Openfile: Opens any .ba file. \n add: Adds 2 numbers together \n subt: Subtracts 2 numbers \n div: Divides 2 numbers \n times: Multiply 2 numbers together")
+        print("Printtext: Prints anything following that line \n showvars: Shows all varitables in your active file and what they are set to. \n Openfile: Opens any .ba file. \n add: Adds 2 numbers together \n subt: Subtracts 2 numbers \n div: Divides 2 numbers \n times: Multiply 2 numbers together \n sqrt: Squares the number provided")
         print("Copyright 2025. License under MIT please see https://github.com/TheRamDev/DeadBasic-coding-language/blob/main/LICENSE for license info ")
 
     # ---------- helpers ----------
@@ -85,8 +91,13 @@ class DeadBasic:
                 return float(int(value))
             except ValueError:
                 pass
-        raise RuntimeDeadBasicError(self._fmt(line_no,
-            f"{label} is not numeric"))
+        sys.stderr.write("\033[91m")
+        traceback.print_exc()
+        sys.stderr.write("\033[0m")
+        raise RuntimeDeadBasicError(self._fmt(line_no,f"{label} is not numeric"))
+
+
+
 
     def _truthy(self, value):
         if value is None:
@@ -154,6 +165,36 @@ class DeadBasic:
         return False
 
     # ---------- commands ----------
+
+    def cmd_input(self, args, line_no):
+        if len(args) != 2:
+            raise SyntaxDeadBasicError(self._fmt(line_no, "input needs: <type> <varname>"))
+        vtype, name = args
+        prompt = f"Enter {vtype} {name}: "
+        raw = input(prompt)
+
+        if vtype == "int":
+            try:
+                val = int(raw)
+            except ValueError:
+                raise RuntimeDeadBasicError(self._fmt(line_no, f"'{raw}' is not an integer"))
+        elif vtype == "long":
+            try:
+                val = int(raw)
+            except ValueError:
+                raise RuntimeDeadBasicError(self._fmt(line_no, f"'{raw}' is not a long integer"))
+        elif vtype == "double":
+            try:
+                val = float(raw)
+            except ValueError:
+                raise RuntimeDeadBasicError(self._fmt(line_no, f"'{raw}' is not a double"))
+        elif vtype == "str":
+            val = raw
+        else:
+            raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown type: {vtype}"))
+
+        self.vars[name] = {"type": vtype, "value": val}
+
     def cmd_printtext(self, args, line_no):
         if not args:
             raise SyntaxDeadBasicError(self._fmt(line_no, "printtext needs text or var names"))
@@ -165,12 +206,12 @@ class DeadBasic:
                 out.append(tok)
         print(" ".join(out))
 
-    def cmd_showvars(self):
+    def cmd_showvars(self, args=None, line_no=None):
         if not self.vars:
             print("(no vars)")
             return
         for k, meta in self.vars.items():
-            print(f"{meta['type']} {k} = {meta['value']}")
+            print(f"{meta['type']} {k} = {meta['value']}"),
 
     def cmd_openfile(self, args, line_no):
         if not args:
