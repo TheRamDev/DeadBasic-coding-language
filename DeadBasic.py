@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 # DeadBasic.BA
-# v0.4.4: Added inputs, Fixed some error  handling issues. Refined some error with div functions.
+# v0.4.5: Added try catch blocks
 
 import sys, shlex, pathlib
 import getpass
 import math
-
-
 import traceback
 
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 
 # ---------- Error types ----------
 class DeadBasicError(Exception):
     """Base interpreter error."""
-
     pass
 
 class SyntaxDeadBasicError(DeadBasicError):
@@ -23,7 +20,6 @@ class SyntaxDeadBasicError(DeadBasicError):
 
 class RuntimeDeadBasicError(DeadBasicError):
     """Runtime error (e.g., type mismatch, unknown var)."""
-
     pass
 
 
@@ -44,7 +40,6 @@ class DeadBasic:
             "times".lower():     self.cmd_multiply,
             "sqrt".lower():      self.cmd_squareroot,
             "input".lower():     self.cmd_input,
-
         }
 
         # Declarations
@@ -53,10 +48,10 @@ class DeadBasic:
         # Flow-control contexts (no nesting by design)
         self.if_ctx = None             # {"cond_true": bool, "in_else": bool}
         self.while_ctx = None          # {"start_pc": int, "cond_tokens": list[str]}
+        self.try_ctx = None            # {"has_error": bool, "in_catch": bool, "err_name": str|None, "err_msg": str|None}
 
         # For better error messages
         self.current_file = "<repl>"
-
 
     # ---------- Help Command --------
     @staticmethod
@@ -64,6 +59,7 @@ class DeadBasic:
         print(f"Welcome to Deadbasic Version: {VERSION}")
         print("Commands are as followed.")
         print("Printtext: Prints anything following that line \n showvars: Shows all varitables in your active file and what they are set to. \n Openfile: Opens any .ba file. \n add: Adds 2 numbers together \n subt: Subtracts 2 numbers \n div: Divides 2 numbers \n times: Multiply 2 numbers together \n sqrt: Squares the number provided")
+        print("Flow: if/else/endif, while/endwhile, try/catch [errVar]/endtry")
         print("Copyright 2025. License under MIT please see https://github.com/TheRamDev/DeadBasic-coding-language/blob/main/LICENSE for license info ")
 
     # ---------- helpers ----------
@@ -96,9 +92,6 @@ class DeadBasic:
         sys.stderr.write("\033[0m")
         raise RuntimeDeadBasicError(self._fmt(line_no,f"{label} is not numeric"))
 
-
-
-
     def _truthy(self, value):
         if value is None:
             return False
@@ -112,12 +105,17 @@ class DeadBasic:
         return f"[{self.current_file}:line {line_no}] {msg}"
 
     def _detect_indent(self, line: str):
-        """Return (indent, content). indent==1 if line starts with TAB or 4 spaces."""
-        if line.startswith("\t"):
-            return 1, line[1:]
-        if line.startswith("    "):
-            return 1, line[4:]
-        return 0, line
+        """
+        Treat any run of leading whitespace (spaces, tabs, NBSP, etc.)
+        as a single indent level. No nested blocks in this language,
+        so we collapse all leading whitespace to indent=1.
+        """
+        i = 0
+        while i < len(line) and line[i].isspace() and line[i] not in "\r\n":
+            i += 1
+        if i == 0:
+            return 0, line
+        return 1, line[i:]
 
     # ---------- condition evaluation (shared by IF/WHILE) ----------
     def _eval_condition_tokens(self, tokens, line_no):
@@ -164,8 +162,26 @@ class DeadBasic:
             return True
         return False
 
-    # ---------- commands ----------
+    def _should_execute_try_body_line(self):
+        if self.try_ctx is None:
+            return False
+        # in try body (not in catch) only when no error yet
+        return not self.try_ctx["in_catch"] and not self.try_ctx["has_error"]
 
+    def _should_execute_catch_body_line(self):
+        if self.try_ctx is None:
+            return False
+        # in catch body only when in_catch and there was an error
+        return self.try_ctx["in_catch"] and self.try_ctx["has_error"]
+
+    def _enter_catch_if_needed(self):
+        """Assign err var on catch entry if set."""
+        if self.try_ctx and self.try_ctx["in_catch"] and self.try_ctx["err_name"]:
+            name = self.try_ctx["err_name"]
+            msg = self.try_ctx["err_msg"] if self.try_ctx["err_msg"] is not None else ""
+            self.vars[name] = {"type": "str", "value": str(msg)}
+
+    # ---------- commands ----------
     def cmd_input(self, args, line_no):
         if len(args) != 2:
             raise SyntaxDeadBasicError(self._fmt(line_no, "input needs: <type> <varname>"))
@@ -220,6 +236,7 @@ class DeadBasic:
         # Clear dangling control states before jumping into another file
         self.if_ctx = None
         self.while_ctx = None
+        self.try_ctx = None
         self.run_file(path)
 
     def cmd_add(self, args, line_no):
@@ -254,10 +271,7 @@ class DeadBasic:
             result = a / b
             print(int(result) if result.is_integer() else result)
         except ZeroDivisionError:
-            print("You cannot divide by 0. Nice try. \n \n (I almost forgot to add this)")
-
-
-
+            raise RuntimeDeadBasicError(self._fmt(line_no, "You cannot divide by 0."))
 
     def cmd_multiply(self, args, line_no):
         if len(args) != 2:
@@ -266,8 +280,6 @@ class DeadBasic:
         b = self._to_number(self._resolve(args[1], line_no), line_no, "second argument")
         result = a * b
         print(int(result) if result.is_integer() else result)
-
-
 
     def cmd_declare(self, vtype, args, line_no):
         if len(args) < 2:
@@ -293,7 +305,7 @@ class DeadBasic:
                 f"type mismatch: {name} is {self.vars[name]['type']}, not {vtype}"))
         self.vars[name] = {"type": vtype, "value": val}
 
-    # ---------- single-line execution (used by REPL) ----------
+    # ---------- single-line execution (REPL) ----------
     def execute_line(self, line, line_no):
         """Executes a *single* textual line. Suitable for REPL.
         Loops are not supported here (they need multi-line scan)."""
@@ -319,12 +331,41 @@ class DeadBasic:
             raise SyntaxDeadBasicError(self._fmt(line_no,
                 "while/endwhile are only supported in .ba files, not in REPL"))
 
-        # IF/ELSE/ENDIF handling at top level in REPL
+        # ---- Top-level control in REPL
         if indent == 0:
+            # TRY/CATCH/ENDTRY
+            if head_l == "try":
+                if self.try_ctx is not None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "Nested TRY not supported"))
+                if self.if_ctx is not None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "TRY cannot start inside an open IF; close IF first"))
+                self.try_ctx = {"has_error": False, "in_catch": False, "err_name": None, "err_msg": None}
+                return
+            if head_l == "catch":
+                if self.try_ctx is None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "'catch' without matching 'try'"))
+                if self.try_ctx["in_catch"]:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "multiple 'catch' not allowed"))
+                if len(args) > 1:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "catch takes zero or one var name"))
+                self.try_ctx["in_catch"] = True
+                self.try_ctx["err_name"] = (args[0] if args else None)
+                # assign err var on entry
+                self._enter_catch_if_needed()
+                return
+            if head_l == "endtry":
+                if self.try_ctx is None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "'endtry' without matching 'try'"))
+                self.try_ctx = None
+                return
+
+            # IF/ELSE/ENDIF handling at top level in REPL
             if head_l == "if":
                 if self.if_ctx is not None:
                     raise SyntaxDeadBasicError(self._fmt(line_no,
                         "Nested IF not supported (previous IF missing 'endif'?)"))
+                if self.try_ctx is not None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, "IF cannot start inside an open TRY; close TRY first"))
                 cond = self._eval_condition_tokens(args, line_no)
                 self.if_ctx = {"cond_true": cond, "in_else": False}
                 return
@@ -341,40 +382,79 @@ class DeadBasic:
                 self.if_ctx = None
                 return
 
-            # If an IS open, only else/endif are legal at top level
+            # If any block is open, only its headers allowed at top level
             if self.if_ctx is not None:
                 raise SyntaxDeadBasicError(self._fmt(line_no,
                     "Inside IF: expected an indented line (TAB/4 spaces), 'else', or 'endif'"))
-
-            # decls / commands
-            if head_l in self.type_keywords:
-                self.cmd_declare(head_l, args, line_no); return
-            if head_l not in self.commands:
-                raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
-            self.commands[head_l](args, line_no); return
-
-        # Indented line
-        if indent == 1:
-            if self.if_ctx is None:
+            if self.try_ctx is not None:
                 raise SyntaxDeadBasicError(self._fmt(line_no,
-                    "You are missing the required TAB/4 spaces before this IF body line"))
-            if head_l in {"if", "else", "endif"}:
-                raise SyntaxDeadBasicError(self._fmt(line_no, f"'{head_l}' must be at top level (no indent)"))
-            if not self._should_execute_if_body_line():
-                return
+                    "Inside TRY: expected an indented line (TAB/4 spaces), 'catch', or 'endtry'"))
+
+            # Decls / commands
             if head_l in self.type_keywords:
                 self.cmd_declare(head_l, args, line_no); return
             if head_l not in self.commands:
                 raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
             self.commands[head_l](args, line_no); return
 
-    # ---------- file execution with program counter (supports WHILE) ----------
+        # ---- Indented line (REPL)
+        if indent == 1:
+            if head_l in {"if", "else", "endif", "while", "endwhile", "try", "catch", "endtry"}:
+                raise SyntaxDeadBasicError(self._fmt(line_no, f"'{head_l}' must be at top level (no indent)"))
+
+            # IF body?
+            if self.if_ctx is not None:
+                if not self._should_execute_if_body_line():
+                    return
+                if head_l in self.type_keywords:
+                    self.cmd_declare(head_l, args, line_no); return
+                if head_l not in self.commands:
+                    raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
+                self.commands[head_l](args, line_no); return
+
+            # TRY body?
+            if self.try_ctx is not None:
+                # skip if not appropriate section
+                if self._should_execute_try_body_line():
+                    try:
+                        if head_l in self.type_keywords:
+                            self.cmd_declare(head_l, args, line_no)
+                        else:
+                            if head_l not in self.commands:
+                                raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
+                            self.commands[head_l](args, line_no)
+                    except DeadBasicError as e:
+                        # record error & stop executing try body; wait for catch
+                        self.try_ctx["has_error"] = True
+                        self.try_ctx["err_msg"] = str(e)
+                    except Exception as e:
+                        self.try_ctx["has_error"] = True
+                        self.try_ctx["err_msg"] = f"Internal error: {e}"
+                    return
+                elif self._should_execute_catch_body_line():
+                    # ensure err var exists before first catch line
+                    self._enter_catch_if_needed()
+                    if head_l in self.type_keywords:
+                        self.cmd_declare(head_l, args, line_no); return
+                    if head_l not in self.commands:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
+                    self.commands[head_l](args, line_no); return
+                else:
+                    # inside TRY but not running this section
+                    return
+
+            # Indent but no block => syntax error
+            raise SyntaxDeadBasicError(self._fmt(line_no,
+                "You are missing the required 'while/if/try' before this indented line"))
+
+    # ---------- file execution with program counter (supports WHILE, TRY) ----------
     def run_file(self, path: pathlib.Path):
         if not path.exists():
             raise RuntimeDeadBasicError(self._fmt(0, f"file not found: {path}"))
         self.current_file = str(path)
         self.if_ctx = None
         self.while_ctx = None
+        self.try_ctx = None
 
         with path.open("r", encoding="utf-8") as f:
             lines = [ln.rstrip("\n") for ln in f]
@@ -399,20 +479,19 @@ class DeadBasic:
             head, *args = tokens
             head_l = head.lower()
 
-            # ---- Top-level control: IF/ELSE/ENDIF/WHILE/ENDWHILE
+            # ---- Top-level control
             if indent == 0:
 
                 # WHILE
                 if head_l == "while":
                     if self.while_ctx is not None:
-                        raise SyntaxDeadBasicError(self._fmt(line_no,
-                            "Nested WHILE not supported"))
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "Nested WHILE not supported"))
                     if self.if_ctx is not None:
-                        raise SyntaxDeadBasicError(self._fmt(line_no,
-                            "WHILE cannot start inside an open IF; close IF first"))
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "WHILE cannot start inside an open IF; close IF first"))
+                    if self.try_ctx is not None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "WHILE cannot start inside an open TRY; close TRY first"))
                     cond = self._eval_condition_tokens(args, line_no)
                     # find matching endwhile to allow skipping when false
-                    # (no nesting => first top-level 'endwhile' we meet)
                     if not cond:
                         j = pc + 1
                         found = False
@@ -423,12 +502,9 @@ class DeadBasic:
                                 break
                             j += 1
                         if not found:
-                            raise SyntaxDeadBasicError(self._fmt(line_no,
-                                "missing 'endwhile' for this 'while'"))
-                        # skip to line after 'endwhile'
+                            raise SyntaxDeadBasicError(self._fmt(line_no, "missing 'endwhile' for this 'while'"))
                         pc = j + 1
                         continue
-                    # condition true -> enter loop
                     self.while_ctx = {"start_pc": pc, "cond_tokens": args}
                     pc += 1
                     continue
@@ -436,26 +512,56 @@ class DeadBasic:
                 if head_l == "endwhile":
                     if self.while_ctx is None:
                         raise SyntaxDeadBasicError(self._fmt(line_no, "'endwhile' without matching 'while'"))
-                    # re-evaluate condition
                     cond = self._eval_condition_tokens(self.while_ctx["cond_tokens"], line_no)
                     if cond:
-                        # jump back to line after 'while' header
                         pc = self.while_ctx["start_pc"] + 1
                         continue
                     else:
-                        # exit loop
                         self.while_ctx = None
                         pc += 1
                         continue
 
+                # TRY/CATCH/ENDTRY
+                if head_l == "try":
+                    if self.try_ctx is not None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "Nested TRY not supported"))
+                    if self.if_ctx is not None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "TRY cannot start inside an open IF; close IF first"))
+                    if self.while_ctx is not None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "TRY cannot start inside an open WHILE; close WHILE first"))
+                    self.try_ctx = {"has_error": False, "in_catch": False, "err_name": None, "err_msg": None}
+                    pc += 1
+                    continue
+
+                if head_l == "catch":
+                    if self.try_ctx is None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "'catch' without matching 'try'"))
+                    if self.try_ctx["in_catch"]:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "multiple 'catch' not allowed"))
+                    if len(args) > 1:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "catch takes zero or one var name"))
+                    self.try_ctx["in_catch"] = True
+                    self.try_ctx["err_name"] = (args[0] if args else None)
+                    # assign err var now
+                    self._enter_catch_if_needed()
+                    pc += 1
+                    continue
+
+                if head_l == "endtry":
+                    if self.try_ctx is None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "'endtry' without matching 'try'"))
+                    self.try_ctx = None
+                    pc += 1
+                    continue
+
                 # IF
                 if head_l == "if":
                     if self.if_ctx is not None:
-                        raise SyntaxDeadBasicError(self._fmt(line_no,
-                            "Nested IF not supported (previous IF missing 'endif'?)"))
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "Nested IF not supported (previous IF missing 'endif'?)"))
                     if self.while_ctx is not None:
-                        # allowed to be inside a loop, but IF header must be top-level already (it is)
                         pass
+                    if self.try_ctx is not None:
+                        raise SyntaxDeadBasicError(self._fmt(line_no, "IF cannot start inside an open TRY; close TRY first"))
                     cond = self._eval_condition_tokens(args, line_no)
                     self.if_ctx = {"cond_true": cond, "in_else": False}
                     pc += 1
@@ -477,10 +583,13 @@ class DeadBasic:
                     pc += 1
                     continue
 
-                # If an IS open, only else/endif are allowed at top level
+                # If a block is open, limit headers at top level
                 if self.if_ctx is not None:
                     raise SyntaxDeadBasicError(self._fmt(line_no,
                         "Inside IF: expected an indented body line (TAB/4 spaces), 'else', or 'endif'"))
+                if self.try_ctx is not None:
+                    raise SyntaxDeadBasicError(self._fmt(line_no,
+                        "Inside TRY: expected an indented body line (TAB/4 spaces), 'catch', or 'endtry'"))
 
                 # Declarations / Commands
                 if head_l in self.type_keywords:
@@ -493,9 +602,9 @@ class DeadBasic:
                 pc += 1
                 continue
 
-            # ---- Indented body line (IF or WHILE body)
+            # ---- Indented body line (IF, WHILE, TRY)
             if indent == 1:
-                if head_l in {"if", "else", "endif", "while", "endwhile"}:
+                if head_l in {"if", "else", "endif", "while", "endwhile", "try", "catch", "endtry"}:
                     raise SyntaxDeadBasicError(self._fmt(line_no, f"'{head_l}' must be at top level (no indent)"))
 
                 # IF body?
@@ -503,7 +612,6 @@ class DeadBasic:
                     if not self._should_execute_if_body_line():
                         pc += 1
                         continue
-                    # execute IF body line
                     if head_l in self.type_keywords:
                         self.cmd_declare(head_l, args, line_no)
                     else:
@@ -515,7 +623,6 @@ class DeadBasic:
 
                 # WHILE body?
                 if self.while_ctx is not None:
-                    # execute WHILE body line
                     if head_l in self.type_keywords:
                         self.cmd_declare(head_l, args, line_no)
                     else:
@@ -525,16 +632,51 @@ class DeadBasic:
                     pc += 1
                     continue
 
+                # TRY body?
+                if self.try_ctx is not None:
+                    if self._should_execute_try_body_line():
+                        try:
+                            if head_l in self.type_keywords:
+                                self.cmd_declare(head_l, args, line_no)
+                            else:
+                                if head_l not in self.commands:
+                                    raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
+                                self.commands[head_l](args, line_no)
+                        except DeadBasicError as e:
+                            self.try_ctx["has_error"] = True
+                            self.try_ctx["err_msg"] = str(e)
+                        except Exception as e:
+                            self.try_ctx["has_error"] = True
+                            self.try_ctx["err_msg"] = f"Internal error: {e}"
+                        pc += 1
+                        continue
+                    elif self._should_execute_catch_body_line():
+                        # ensure err var present
+                        self._enter_catch_if_needed()
+                        if head_l in self.type_keywords:
+                            self.cmd_declare(head_l, args, line_no)
+                        else:
+                            if head_l not in self.commands:
+                                raise SyntaxDeadBasicError(self._fmt(line_no, f"unknown command: {head}"))
+                            self.commands[head_l](args, line_no)
+                        pc += 1
+                        continue
+                    else:
+                        # inside TRY but not active section -> skip
+                        pc += 1
+                        continue
+
                 # Indent but no block => syntax error
                 raise SyntaxDeadBasicError(self._fmt(line_no,
-                    "You are missing the required 'while/if' before this indented line"))
+                    "You are missing the required 'while/if/try' before this indented line"))
 
         # End of file: check for dangling blocks
         if self.if_ctx is not None:
             raise SyntaxDeadBasicError(self._fmt(n, "file ended but 'endif' is missing"))
         if self.while_ctx is not None:
             raise SyntaxDeadBasicError(self._fmt(n, "file ended but 'endwhile' is missing"))
-
+        if self.try_ctx is not None:
+            raise SyntaxDeadBasicError(self._fmt(n, "file ended but 'endtry' is missing"))
 
 # ---------- CLI / REPL ----------
 def usage():
@@ -549,6 +691,7 @@ def usage():
         "  - Cmds : printtext ... | showvars | openfile \"file.ba\" | add a b\n"
         "  - IF   : if <lhs> <op> <rhs> | if not <val> ; ops: = != < > <= >=\n"
         "  - WHILE: while <cond> ... endwhile   (no nesting; body uses ONE TAB or FOUR SPACES)\n"
+        "  - TRY  : try ... catch [errVar] ... endtry   (no nesting; body uses ONE TAB or FOUR SPACES)\n"
         "  - Comments start with # or ``\n"
     )
 
@@ -567,9 +710,11 @@ def repl():
                 db.execute_line(line, line_no)
             except DeadBasicError as e:
                 print(e)
+            except Exception as e:
+                print(f"Internal error: {e}")
+                traceback.print_exc()
     except (EOFError, KeyboardInterrupt):
         print("\nbye")
-
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
@@ -581,6 +726,10 @@ if __name__ == "__main__":
             db.run_file(prog)
         except DeadBasicError as e:
             print(e, file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Internal error: {e}", file=sys.stderr)
+            traceback.print_exc()
             sys.exit(1)
     else:
         usage()
